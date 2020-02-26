@@ -198,7 +198,7 @@ class PorterStemmer:
         """step1c() turns terminal y to i when there is another vowel in the stem."""
        
         # MADE EDITS HERE
-        if (self.ends("y") and self.vowelinstem() and cons(self.k - 1)):
+        if (self.ends("y") and self.vowelinstem() and self.cons(self.k - 1)):
             self.b = self.b[:self.k] + 'i' + self.b[self.k+1:]
 
     def step2(self):
