@@ -205,7 +205,7 @@ class Chatbot:
         :param preprocessed_input: a user-supplied line of text that has been pre-processed with preprocess()
         :returns: a numerical value for the sentiment of the text
         """
-        print(stemmer.stem('dogs'))
+        
         self.debuggy.append(preprocessed_input)
         preprocessed_input = preprocessed_input.replace('\'', '')
         words = preprocessed_input.split()
@@ -326,12 +326,17 @@ class Chatbot:
         #############################################################################
 
         # The starter code returns a new matrix shaped like ratings but full of zeros.
-        binarized_ratings = np.zeros_like(ratings)
+        for i in range(len(ratings)):
+            for j in range(len(ratings[i])):
+                if ratings[i][j] > threshold:
+                    ratings[i][j] = 1
+                elif ratings[i][j] <= threshold and ratings[i][j] > 0:
+                    ratings[i][j] = -1
+        return ratings
 
         #############################################################################
         #                             END OF YOUR CODE                              #
         #############################################################################
-        return binarized_ratings
 
     def similarity(self, u, v):
         """Calculate the cosine similarity between two vectors.
@@ -346,7 +351,7 @@ class Chatbot:
         #############################################################################
         # TODO: Compute cosine similarity between the two vectors.
         #############################################################################
-        similarity = 0
+        similarity = np.inner(u, v) / (np.linalg.norm(u) * np.linalg.norm(v))
         #############################################################################
         #                             END OF YOUR CODE                              #
         #############################################################################
