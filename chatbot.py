@@ -22,6 +22,10 @@ class Chatbot:
         self.titles, ratings = movielens.ratings()
         self.sentiment = movielens.sentiment()
         
+        self.sentiment_stemmed = {}
+        for word in self.sentiment:
+            self.sentiment_stemmed[stemmer.stem(word)] = self.sentiment[word]
+
         self.debuggy = []
 
         #############################################################################
@@ -215,8 +219,9 @@ class Chatbot:
 
         for word in words:
             sent = 0
-            if word in self.sentiment:
-                if self.sentiment[word] == 'pos':
+            stemmed = stemmer.stem(word)
+            if stemmed in self.sentiment_stemmed:
+                if self.sentiment_stemmed[stemmed] == 'pos':
                     sent = 1
                 else:
                     sent = -1
