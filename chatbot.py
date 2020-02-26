@@ -210,7 +210,6 @@ class Chatbot:
         :returns: a numerical value for the sentiment of the text
         """
         
-        self.debuggy.append(preprocessed_input)
         preprocessed_input = preprocessed_input.replace('\'', '')
         words = preprocessed_input.split()
         negated = False
@@ -238,10 +237,7 @@ class Chatbot:
         elif sentiment < -1:
             sentiment = -1
 
-        self.debuggy.append(sentiment)
         return sentiment
-
-
 
     def extract_sentiment_for_movies(self, preprocessed_input):
         """Creative Feature: Extracts the sentiments from a line of pre-processed text
@@ -393,12 +389,26 @@ class Chatbot:
         #######################################################################################
 
         # Populate this list with k movie indices to recommend to the user.
-        recommendations = []
+        if not creative: 
+            recommendations = {} # dict of index to estimated rating       
+            rated = (user_ratings != 0) # get indices of nonzero ratings
+            rated_indices = np.where(rated)[0]
+
+            for j in range(len(ratings_matrix)):
+                if j not in rated_indices and sum(ratings_matrix[j]) != 0:
+                        est_rating = 0
+                        for index in rated_indices:
+                            est_rating += self.similarity(ratings_matrix[index], ratings_matrix[j])*user_ratings[index]
+                        recommendations[j] = est_rating
+        # sort by estimated rating, get 1st k and then get indices
+        final_recs = sorted(recommendations.items(), key=lambda item: item[1], reverse = True)
+        final_recs = final_recs[:k]
+        final_recs = [x[0] for x in final_recs]
 
         #############################################################################
         #                             END OF YOUR CODE                              #
         #############################################################################
-        return recommendations
+        return final_recs
 
     #############################################################################
     # 4. Debug info                                                             #
