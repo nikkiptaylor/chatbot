@@ -21,12 +21,16 @@ class Chatbot:
         self.creative = creative
         self.titles, ratings = movielens.ratings()
         self.sentiment = movielens.sentiment()
-        
+
         self.sentiment_stemmed = {}
         for word in self.sentiment:
             self.sentiment_stemmed[stemmer.stem(word)] = self.sentiment[word]
-
         self.debuggy = []
+
+        #to help print states
+        self.recommendations = 0
+        self.clarify = False
+        self.candidates = []
 
         #############################################################################
         # TODO: Binarize the movie ratings matrix.                                  #
@@ -48,7 +52,7 @@ class Chatbot:
         # TODO: Write a short greeting message                                      #
         #############################################################################
 
-        greeting_message = "How can I help you?"
+        greeting_message = "Hello! My name is VAHN. I want to recommend a movie to you but first I need to ask you about your movie preferences. Tell me about a movie you liked or disliked."
 
         #############################################################################
         #                             END OF YOUR CODE                              #
@@ -61,7 +65,7 @@ class Chatbot:
         # TODO: Write a short farewell message                                      #
         #############################################################################
 
-        goodbye_message = "Have a nice day!"
+        goodbye_message = "Thank you for chatting with me. Have a nice day!"
 
         #############################################################################
         #                             END OF YOUR CODE                              #
@@ -96,12 +100,74 @@ class Chatbot:
         # possibly calling other functions. Although modular code is not graded,    #
         # it is highly recommended.                                                 #
         #############################################################################
+        response = ""
         if self.creative:
-            response = "I processed {} in creative mode!!".format(line)
+            # title = self.extract_titles(line)
+            # movies = self.find_movies_by_title(title)
+            # response = "I found "
+            # for m in movies:
+            #     response += self.titles[m][0]
+
+            response = "I processed {} in creative mode!".format(line)
+
+        #starter responses
         else:
-            text = self.extract_titles(line)
+            text = ""
+            #if you need to clarify because of multiple movies
+            if self.clarify == True:
+                response = self.disambiguate(line, self.candidates)
+                if len(response) == 1:
+                    self.clarify = False
+                    self.candidates = []
+                    text = self.titles(response[0])
+                else:
+                    self.candidates = movies[0]
+                    self.clarify = True
+                    response = "Which movie is it:"
+                    for i in movies[0]:
+                        response += self.titles[i][0]
+                        response += ","
+                    return response
+
+            #no clarification necessary
+            else:
+                text = self.extract_titles(line)
+                movies = []
+                for t in text:
+                    potential_titles = self.find_movies_by_title(t)
+                    movies.append(potential_titles)
+
+                # CLARIFY MOVIE
+                # ADDRESS MULTIPLE MOVIES, for now just looks at first one
+                if len(movies[0]) > 1:
+                    self.candidates = movies[0]
+                    self.clarify = True
+                    response = "Which movie is it:"
+                    for i in movies[0]:
+                        response += self.titles[i][0]
+                        response += ","
+                    return response
+
+            #text = self.titles[movies[0][0]][0]
             sentiment = self.extract_sentiment(line)
-            response = "I processed {} in starter mode!!".format(line)
+
+            sent = ""
+            if sentiment == 1:
+                sent = "You liked \"{}\"! ".format(text)
+            elif sentiment == -1:
+                sent = "You did not like \"{}\"! ".format(text)
+            else:
+                sent = "You are neutral about \"{}\"! ".format(text)
+
+            if self.recommendations < 5:
+                response = sent + "Please tell me your thoughts on another movie."
+                self.recommendations += 1
+            else:
+                self.recommendations = 0
+                recommend = "That is enough for me to make a recommendation. I recommend that you watch \"XX\"!" #.format(recommend)
+                optionToQuit = "Would you like me to give you another recommendation? If YES enter Y, and if NO enter :quit if you're done"
+                response = sent + recommend + optionToQuit
+
 
         #############################################################################
         #                             END OF YOUR CODE                              #
@@ -161,8 +227,6 @@ class Chatbot:
                 movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
         return movie_titles
 
-        
-
     def find_movies_by_title(self, title):
         """ Given a movie title, return a list of indices of matching movies.
 
@@ -209,7 +273,7 @@ class Chatbot:
         :param preprocessed_input: a user-supplied line of text that has been pre-processed with preprocess()
         :returns: a numerical value for the sentiment of the text
         """
-        
+
         preprocessed_input = preprocessed_input.replace('\'', '')
         words = preprocessed_input.split()
         negated = False
@@ -276,8 +340,7 @@ class Chatbot:
         :param max_distance: the maximum edit distance to search for
         :returns: a list of movie indices with titles closest to the given title and within edit distance max_distance
         """
-
-        pass
+        return []
 
     def disambiguate(self, clarification, candidates):
         """Creative Feature: Given a list of movies that the user could be talking about
@@ -298,7 +361,20 @@ class Chatbot:
         :param candidates: a list of movie indices
         :returns: a list of indices corresponding to the movies identified by the clarification
         """
-        pass
+        counts = [0]*len(candidates)
+        clar = clarification.split()
+        for i in range(len(candidates)):
+            for w in clar:
+                c = candidates[i]
+                if w in self.titles[c][0]:
+                    counts[i] += 1
+        print(counts)
+        m = max(counts)
+        identified = [i for i, j in enumerate(counts) if j == m]
+        final = []
+        for i in identified:
+            final.append(candidates[i])
+        return final
 
     #############################################################################
     # 3. Movie Recommendation helper functions                                  #
@@ -389,8 +465,8 @@ class Chatbot:
         #######################################################################################
 
         # Populate this list with k movie indices to recommend to the user.
-        if not creative: 
-            recommendations = {} # dict of index to estimated rating       
+        if not creative:
+            recommendations = {} # dict of index to estimated rating
             rated = (user_ratings != 0) # get indices of nonzero ratings
             rated_indices = np.where(rated)[0]
 
@@ -430,14 +506,16 @@ class Chatbot:
         Consider adding to this description any information about what your chatbot
         can do and how the user can interact with it.
         """
-        return """
-        Your task is to implement the chatbot as detailed in the PA6 instructions.
-        Remember: in the starter mode, movie names will come in quotation marks and
-        expressions of sentiment will be simple!
-        Write here the description for your own chatbot!
-        """
+        intro = "Hello! My name is VAHN and I specialize in movie preferences. "
+        return intro
+        # Your task is to implement the chatbot as detailed in the PA6 instructions.
+        # Remember: in the starter mode, movie names will come in quotation marks and
+        # expressions of sentiment will be simple!
+        # Write here the description for your own chatbot!
+        # """
 
 
 if __name__ == '__main__':
     print('To run your chatbot in an interactive loop from the command line, run:')
     print('    python3 repl.py')
+
