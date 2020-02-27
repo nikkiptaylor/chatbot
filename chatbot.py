@@ -119,7 +119,7 @@ class Chatbot:
                 if len(response) == 1:
                     self.clarify = False
                     self.candidates = []
-                    text = self.titles(response[0])
+                    text = self.titles[response[0]][0]
                 else:
                     self.candidates = movies[0]
                     self.clarify = True
