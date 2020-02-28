@@ -31,6 +31,10 @@ class Chatbot:
         self.recommendations = 0
         self.clarify = False
         self.candidates = []
+        self.originalLine = ""
+        self.moreInfo = False
+        self.movieTitle = ""
+        self.multipleMovies = False
 
         #############################################################################
         # TODO: Binarize the movie ratings matrix.                                  #
@@ -102,76 +106,91 @@ class Chatbot:
         #############################################################################
         response = ""
         if self.creative:
-            # title = self.extract_titles(line)
-            # movies = self.find_movies_by_title(title)
-            # response = "I found "
-            # for m in movies:
-            #     response += self.titles[m][0]
+            return self.process_starter(line)
+            #response = "I processed {} in creative mode!".format(line)
 
-            response = "I processed {} in creative mode!".format(line)
-
-        #starter responses
+        #STARTER RESPONSES
         else:
-            text = ""
-            #if you need to clarify because of multiple movies
-            if self.clarify == True:
-                response = self.disambiguate(line, self.candidates)
-                if len(response) == 1:
-                    self.clarify = False
-                    self.candidates = []
-                    text = self.titles[response[0]][0]
-                else:
-                    self.candidates = movies[0]
-                    self.clarify = True
-                    response = "Which movie is it:"
-                    for i in movies[0]:
-                        response += self.titles[i][0]
-                        response += ","
-                    return response
+            return self.process_starter(line)
 
-            #no clarification necessary
+    def process_starter(self, line):
+        text = ""
+        foundTitle = False
+
+        #OPTION 1: CLARIFICATION -- if there are multiple movie options
+        if self.clarify == True:
+            dis_titles = self.disambiguate(line, self.candidates)
+            if len(dis_titles) == 1:
+                self.clarify = False
+                self.candidates = []
+                text = self.titles[dis_titles[0]][0]
+                foundTitle = True
+            else:
+                self.candidates = dis_titles
+                r = "Please provide more clarification about which movie it is (i.e. unique word): "
+                for i in range(len(dis_titles)):
+                    r += self.titles[dis_titles[i]][0]
+                    if i < (len(dis_titles)-1):
+                        r += ", "
+                    else:
+                        r += ":"
+                return r
+
+        #OPTION 2: NARROWED IT DOWN TO ONE MINUTE
+        else:
+            self.originalLine = line
+
+            #SENTIMENT ClARIFY: check if the user if providing more info for sentiment
+            if self.moreInfo:
+                text = self.movieTitle
+                self.moreInfo = False
+
+            #INPUT OF MOVIE
             else:
                 text = self.extract_titles(line)
+                print(text)
                 movies = []
                 for t in text:
                     potential_titles = self.find_movies_by_title(t)
+                    #EDIT: NEED TO CHECK IF NONE OF THEM ARE REAL TITLES
                     movies.append(potential_titles)
 
-                # CLARIFY MOVIE
                 # ADDRESS MULTIPLE MOVIES, for now just looks at first one
                 if len(movies[0]) > 1:
                     self.candidates = movies[0]
                     self.clarify = True
-                    response = "Which movie is it:"
-                    for i in movies[0]:
-                        response += self.titles[i][0]
-                        response += ","
-                    return response
+                    r = "Please provide more clarification about which movie it is (i.e. unique word): "
+                    for i in range(len(movies[0])):
+                        r += self.titles[movies[0][i]][0]
+                        if i < (len(movies[0])-1):
+                            r += ", "
+                        else:
+                            r += ":"
+                    return r
 
-            #text = self.titles[movies[0][0]][0]
-            sentiment = self.extract_sentiment(line)
+        #text = self.titles[movies[0][0]][0]
+        sentiment = self.extract_sentiment(self.originalLine)
 
-            sent = ""
-            if sentiment == 1:
-                sent = "You liked \"{}\"! ".format(text)
-            elif sentiment == -1:
-                sent = "You did not like \"{}\"! ".format(text)
-            else:
-                sent = "You are neutral about \"{}\"! ".format(text)
-
-            if self.recommendations < 5:
-                response = sent + "Please tell me your thoughts on another movie."
-                self.recommendations += 1
-            else:
-                self.recommendations = 0
-                recommend = "That is enough for me to make a recommendation. I recommend that you watch \"XX\"!" #.format(recommend)
-                optionToQuit = "Would you like me to give you another recommendation? If YES enter Y, and if NO enter :quit if you're done"
-                response = sent + recommend + optionToQuit
+        sent = ""
+        if sentiment == 1:
+            sent = "You liked \"{}\"! ".format(text)
+        elif sentiment == -1:
+            sent = "You did not like \"{}\"! ".format(text)
+        else:
+            sent = "I'm sorry, I am not sure how you felt about \"{}\". Could you provide me with more information? ".format(text)
+            self.moreInfo = True
+            self.movieTitle = text
+            return sent
 
 
-        #############################################################################
-        #                             END OF YOUR CODE                              #
-        #############################################################################
+        if self.recommendations < 5:
+            response = sent + "Please tell me your thoughts on another movie."
+            self.recommendations += 1
+        else:
+            self.recommendations = 0
+            recommend = "That is enough for me to make a recommendation. I recommend that you watch \"XX\"!" #.format(recommend)
+            optionToQuit = "Would you like me to give you another recommendation? If YES enter Y, and if NO enter :quit if you're done"
+            response = sent + recommend + optionToQuit
         return response
 
     @staticmethod
@@ -220,12 +239,37 @@ class Chatbot:
         :param preprocessed_input: a user-supplied line of text that has been pre-processed with preprocess()
         :returns: list of movie titles that are potentially in the text
         """
-        #done
-        quote_indices = [i for i, ltr in enumerate(preprocessed_input) if ltr == '\"']
-        movie_titles = []
-        for i in range(0, len(quote_indices), 2):
-                movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
-        return movie_titles
+        #CREATIVE MODE
+        if self.creative:
+            movies = []
+
+            for title in self.titles:
+                formatted_title = title[0].lower()
+                formatted_title = re.sub(' \(.*\)', '', formatted_title)
+
+                if re.search(', the$', formatted_title):
+                    formatted_title = re.sub(', the$', '', formatted_title)
+                    formatted_title = 'the ' + formatted_title
+
+                movie_name = formatted_title
+
+                formatted_title = re.sub('\*', '\*', formatted_title)
+                formatted_title = re.sub('\+', '\+', formatted_title)
+                formatted_title = re.sub('\$', '\$', formatted_title)
+                formatted_title = '[ ,^\"]' + formatted_title + '[ ,$!?;:\.\"]'
+
+                if  re.search(formatted_title, preprocessed_input, re.IGNORECASE):
+                    movies.append(movie_name),
+            return movies
+
+        #STARTER MODE
+        else:
+            quote_indices = [i for i, ltr in enumerate(preprocessed_input) if ltr == '\"']
+            movie_titles = []
+            for i in range(0, len(quote_indices), 2):
+                    movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
+            return movie_titles
+
 
     def find_movies_by_title(self, title):
         """ Given a movie title, return a list of indices of matching movies.
@@ -273,12 +317,16 @@ class Chatbot:
         :param preprocessed_input: a user-supplied line of text that has been pre-processed with preprocess()
         :returns: a numerical value for the sentiment of the text
         """
-
         preprocessed_input = preprocessed_input.replace('\'', '')
         words = preprocessed_input.split()
         negated = False
+        doubled = False
         sentiment = 0
+        double_neg_count = 0
+        double_pos_count = 0
         neg = '(?:never|no|nothing|nowhere|noone|none|not|havent|hasnt|hadnt|cant|couldnt|shouldnt|wont|wouldnt|dont|doesnt|didnt|isnt|arent|aint)'
+        double = '(?:ve+r+y+|re+a+l+y+|to+tal+y+|absolu+tel+y+|tru+l+y+|extre+mel+y+)'
+        strong = '(?:great|awesome+|ter+ible|per+fect|hor+ible|aw+ful|ama+zing|excellent|fantastic|exceptional|ter+ific|wonderful|marvelous|appaling|atrocious|dreadful|lo+ve+d?|ha+te+d?|abhorr?e?d?|despised?)'
 
         for word in words:
             sent = 0
@@ -286,8 +334,25 @@ class Chatbot:
             if stemmed in self.sentiment_stemmed:
                 if self.sentiment_stemmed[stemmed] == 'pos':
                     sent = 1
+                    if doubled == True:
+                        doubled_pos_count += 1
                 else:
                     sent = -1
+                    if doubled == True:
+                        doubled_neg_count += 1
+
+                if self.creative:
+                    if doubled == True:
+                        sent *=2
+                        doubled = False
+                    if re.match(double, word):
+                        doubled = True
+                    if re.match(strong, word):
+                        if self.sentiment_stemmed[stemmed] == 'pos':
+                            double_pos_count += 1
+                        else:
+                            double_neg_count += 1
+                        sent *= 2
                 if negated == True:
                     sent *= -1
             sentiment += sent
@@ -296,12 +361,26 @@ class Chatbot:
             elif re.match('^[.:;!?]$', word):
                 negated = False
 
-        if sentiment > 1:
-            sentiment = 1
-        elif sentiment < -1:
-            sentiment = -1
+        if self.creative:
+            if sentiment > 1:
+                if doubled_pos_count > doubled_neg_count:
+                    sentiment = 2
+                else:
+                    sentiment = 1
+            elif sentiment < -1:
+                if doubled_pos_count > doubled_neg_count:
+                    sentiment = -2
+                else:
+                    sentiment = -1
+        else:
+            if sentiment > 1:
+                sentiment = 1
+            elif sentiment < -1:
+                sentiment = -1
 
+        print(sentiment)
         return sentiment
+
 
     def extract_sentiment_for_movies(self, preprocessed_input):
         """Creative Feature: Extracts the sentiments from a line of pre-processed text
@@ -340,7 +419,37 @@ class Chatbot:
         :param max_distance: the maximum edit distance to search for
         :returns: a list of movie indices with titles closest to the given title and within edit distance max_distance
         """
-        return []
+        def get_edit_distance(title1, title2):
+            n = len(title1)
+            m = len(title2)
+            d = [[0 for i in range(m + 1)] for j in range(n + 1)]
+            for i in range(n+1):
+                d[i][0] = i
+            for i in range(m+1):
+                d[0][i] = i
+            for i in range(1,n+1):
+                for j in range(1,m+1):
+                    if title1[i-1].lower() == title2[j-1].lower():
+                        d[i][j] = min(d[i-1][j] + 1, min(d[i][j-1] + 1, d[i-1][j-1]))
+                    else:
+                        d[i][j] = min(d[i-1][j] + 1, min(d[i][j-1] + 1, d[i-1][j-1] + 2))
+            return d[n][m]
+
+        least_edit_distance = float('inf')
+        edit_distance_map = {}
+        for i in range(len(self.titles)):
+            movie = self.titles[i][0]
+            movie = movie[:movie.rfind('(')]
+            edit_distance = get_edit_distance(movie, title)
+            if edit_distance <= max_distance and edit_distance <= least_edit_distance:
+                least_edit_distance = edit_distance
+                if edit_distance not in edit_distance_map:
+                    edit_distance_map[edit_distance] = []
+                edit_distance_map[edit_distance].append(i)
+
+        return edit_distance_map[least_edit_distance] if least_edit_distance != float('inf') else []
+
+
 
     def disambiguate(self, clarification, candidates):
         """Creative Feature: Given a list of movies that the user could be talking about
@@ -365,8 +474,9 @@ class Chatbot:
         clar = clarification.split()
         for i in range(len(candidates)):
             for w in clar:
+                w = w.replace(",", "")
                 c = candidates[i]
-                if w in self.titles[c][0]:
+                if w.lower() in self.titles[c][0].lower():
                     counts[i] += 1
         print(counts)
         m = max(counts)
@@ -374,6 +484,18 @@ class Chatbot:
         final = []
         for i in identified:
             final.append(candidates[i])
+
+
+        # final = []
+        # for i in candidates:
+        #     c = self.titles[i][0]
+        #     i1 = c.find(",")
+        #     if i1 != -1:
+        #         i2 = c[i1:].find(" ")
+        #         c = c[i1+1:i2] + c[:i1] + c[i2:]
+        #     if clarification in c:
+        #         final.append(i)
+
         return final
 
     #############################################################################
