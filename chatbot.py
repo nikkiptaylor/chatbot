@@ -147,8 +147,8 @@ class Chatbot:
 
             #INPUT OF MOVIE
             else:
+                print(line)
                 text = self.extract_titles(line)
-                print(text)
                 movies = []
                 for t in text:
                     potential_titles = self.find_movies_by_title(t)
@@ -156,17 +156,20 @@ class Chatbot:
                     movies.append(potential_titles)
 
                 # ADDRESS MULTIPLE MOVIES, for now just looks at first one
-                if len(movies[0]) > 1:
-                    self.candidates = movies[0]
-                    self.clarify = True
-                    r = "Please provide more clarification about which movie it is (i.e. unique word): "
-                    for i in range(len(movies[0])):
-                        r += self.titles[movies[0][i]][0]
-                        if i < (len(movies[0])-1):
-                            r += ", "
-                        else:
-                            r += ":"
-                    return r
+                if len(movies) >= 1:
+                    if len(movies[0]) > 1:
+                        self.candidates = movies[0]
+                        self.clarify = True
+                        r = "Please provide more clarification about which movie it is (i.e. unique word): "
+                        for i in range(len(movies[0])):
+                            r += self.titles[movies[0][i]][0]
+                            if i < (len(movies[0])-1):
+                                r += ", "
+                            else:
+                                r += ":"
+                        return r
+                else:
+                    return "I'm sorry. We could not find any titles by that name. Please enter another title."
 
         #text = self.titles[movies[0][0]][0]
         sentiment = self.extract_sentiment(self.originalLine)
@@ -181,7 +184,6 @@ class Chatbot:
             self.moreInfo = True
             self.movieTitle = text
             return sent
-
 
         if self.recommendations < 5:
             response = sent + "Please tell me your thoughts on another movie."
@@ -256,10 +258,11 @@ class Chatbot:
                 formatted_title = re.sub('\*', '\*', formatted_title)
                 formatted_title = re.sub('\+', '\+', formatted_title)
                 formatted_title = re.sub('\$', '\$', formatted_title)
-                formatted_title = '[ ,^\"]' + formatted_title + '[ ,$!?;:\.\"]'
+                formatted_title = '(^|[ ,\"])' + formatted_title + '([ ,!?;:\.\"]|$)'
 
                 if  re.search(formatted_title, preprocessed_input, re.IGNORECASE):
                     movies.append(movie_name),
+            print(movies)
             return movies
 
         #STARTER MODE
@@ -268,7 +271,7 @@ class Chatbot:
             movie_titles = []
             for i in range(0, len(quote_indices), 2):
                     movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
-            return movie_titles
+        return movie_titles
 
 
     def find_movies_by_title(self, title):
@@ -289,11 +292,11 @@ class Chatbot:
         """
         # done
         movies = []
-        title = title.split()
+        title = title.lower().split()
         for i in range(len(self.titles)):
             present = True
             for j in title:
-                index = (self.titles[i][0]).find(j)
+                index = (self.titles[i][0].lower()).find(j)
                 if index == -1:
                     present = False
             if present:
@@ -325,37 +328,55 @@ class Chatbot:
         double_neg_count = 0
         double_pos_count = 0
         neg = '(?:never|no|nothing|nowhere|noone|none|not|havent|hasnt|hadnt|cant|couldnt|shouldnt|wont|wouldnt|dont|doesnt|didnt|isnt|arent|aint)'
-        double = '(?:ve+r+y+|re+a+l+y+|to+tal+y+|absolu+tel+y+|tru+l+y+|extre+mel+y+)'
-        strong = '(?:great|awesome+|ter+ible|per+fect|hor+ible|aw+ful|ama+zing|excellent|fantastic|exceptional|ter+ific|wonderful|marvelous|appaling|atrocious|dreadful|lo+ve+d?|ha+te+d?|abhorr?e?d?|despised?)'
-
+        double = '(?:ve+r+y+|really|re+a+l+y+|to+tal+y+|absolu+tel+y+|tru+l+y+|extre+mel+y+)'
+        strong_pos = '(?:great|awesome+|per+fect|ama+zing|excellent|fantastic|exceptional|ter+ific|wonderful|marvelous|lo+ve+d??)'
+        strong_neg = '(?:hated|ter+ible|hor+ible|aw+ful|appaling|atrocious|dreadful|ha+te+d?|abhorr?e?d?|despised?)'
+        #go through all the input words
         for word in words:
             sent = 0
             stemmed = stemmer.stem(word)
-            if stemmed in self.sentiment_stemmed:
+
+            if re.match(double, word):
+                doubled = True
+
+            #check if strong positive word
+            elif re.match(strong_pos, word):
+                print("strong pos")
+                double_pos_count += 1
+                if doubled:
+                    sent = 4
+                else:
+                    sent = 2
+                doubled = False
+
+            #check if strong negative word
+            elif re.match(strong_neg, word):
+                double_neg_count += 1
+                if doubled:
+                    sent = -4
+                else:
+                    sent = -2
+                doubled = False
+
+            elif stemmed in self.sentiment_stemmed:
                 if self.sentiment_stemmed[stemmed] == 'pos':
                     sent = 1
                     if doubled == True:
-                        doubled_pos_count += 1
+                        double_pos_count += 1
+                        sent *= 2
+                        doubled = False
                 else:
                     sent = -1
                     if doubled == True:
-                        doubled_neg_count += 1
-
-                if self.creative:
-                    if doubled == True:
-                        sent *=2
-                        doubled = False
-                    if re.match(double, word):
-                        doubled = True
-                    if re.match(strong, word):
-                        if self.sentiment_stemmed[stemmed] == 'pos':
-                            double_pos_count += 1
-                        else:
-                            double_neg_count += 1
+                        double_neg_count += 1
                         sent *= 2
-                if negated == True:
-                    sent *= -1
+                        doubled = False
+
+            if negated == True:
+                sent *= -1
             sentiment += sent
+
+            #turn on and turn off negation
             if re.match(neg, word):
                 negated = True
             elif re.match('^[.:;!?]$', word):
@@ -363,12 +384,12 @@ class Chatbot:
 
         if self.creative:
             if sentiment > 1:
-                if doubled_pos_count > doubled_neg_count:
+                if double_pos_count > double_neg_count:
                     sentiment = 2
                 else:
                     sentiment = 1
             elif sentiment < -1:
-                if doubled_pos_count > doubled_neg_count:
+                if double_pos_count < double_neg_count:
                     sentiment = -2
                 else:
                     sentiment = -1
@@ -378,7 +399,6 @@ class Chatbot:
             elif sentiment < -1:
                 sentiment = -1
 
-        print(sentiment)
         return sentiment
 
 
@@ -399,7 +419,37 @@ class Chatbot:
         :returns: a list of tuples, where the first item in the tuple is a movie title,
           and the second is the sentiment in the text toward that movie
         """
-        pass
+        titles = self.extract_titles(preprocessed_input)
+        titlemap = {}
+
+        new_input = preprocessed_input
+
+        for i in range(len(titles)):
+            new_input = re.sub(titles[i], 'movie%s' % i, new_input.lower())
+            titlemap['movie%s' % i] = titles[i]
+
+
+        clauses = re.split('(but|however|\.|\!|,)', new_input)
+        to_remove = ['but', 'however', '.', '!', ',']
+        for rem in to_remove:
+            if rem in clauses:
+                clauses.remove(rem)
+
+        sentiments = []
+        for i in range(len(clauses)-1, -1, -1):
+            matches = re.findall('movie[\d]+', clauses[i])
+
+            if len(titles) == 0:
+                clauses[i-1] = clauses[i-1] + clauses[i]
+            else:
+                if 'not' in clauses[i]:
+                    sentiment = -1 * self.extract_sentiment(clauses[i-1])
+                else:
+                    sentiment = self.extract_sentiment(clauses[i])
+                for match in matches:
+                    sentiments.append((re.findall(titlemap[match], preprocessed_input, re.IGNORECASE)[0], sentiment))
+        return sentiments
+
 
     def find_movies_closest_to_title(self, title, max_distance=3):
         """Creative Feature: Given a potentially misspelled movie title,
@@ -450,7 +500,6 @@ class Chatbot:
         return edit_distance_map[least_edit_distance] if least_edit_distance != float('inf') else []
 
 
-
     def disambiguate(self, clarification, candidates):
         """Creative Feature: Given a list of movies that the user could be talking about
         (represented as indices), and a string given by the user as clarification
@@ -470,32 +519,66 @@ class Chatbot:
         :param candidates: a list of movie indices
         :returns: a list of indices corresponding to the movies identified by the clarification
         """
+        #loop through all the candidates to find max substring of words
         counts = [0]*len(candidates)
-        clar = clarification.split()
         for i in range(len(candidates)):
-            for w in clar:
-                w = w.replace(",", "")
-                c = candidates[i]
-                if w.lower() in self.titles[c][0].lower():
-                    counts[i] += 1
-        print(counts)
-        m = max(counts)
-        identified = [i for i, j in enumerate(counts) if j == m]
+
+            #format the name of the movie
+            movie = self.titles[candidates[i]][0].lower()
+            if re.search(', the$', movie):
+                movie = re.sub(', the$', '', movie)
+                movie = 'the ' + movie
+
+            #find largest substring of full words
+            a = movie.split()
+            for w in range(len(a)):
+                word = re.sub('\(', '', a[w])
+                word = re.sub("\)", "", word)
+                a[w] = word
+            b = clarification.split()
+
+            #longest common subsequence
+            i_m = 0
+            i_c = 0
+            max_count = 0
+            curr_count = 0
+            while True:
+                if a[i_m] == b[i_c]:
+                    curr_count += 1
+                    i_m += 1
+                    i_c += 1
+                else:
+                    if curr_count > max_count:
+                        max_count = curr_count
+                    curr_count = 0
+                    i_c += 1
+                #break if done with movie words & reset if
+                if i_c == len(b):
+                    i_m +=1
+                    i_c = 0
+                if i_m >= len(a):
+                    break
+
+            if curr_count > max_count:
+                max_count = curr_count
+            counts[i] = max_count
+
+        #Don't identify by movie title but other inputs
+        if max(counts) == 0:
+            if re.match(clarification, "^ *\d[\d ]*$"):
+                i = int(clarification)
+                if i <= len(candidates):
+                    return candidates[i-1]
+            if re.match(clarification, "most recent"):
+                return oldest
+            if re.match(clarification, "most recent"):
+                return recent
+
+        #prints the longest sub-sequene
+        identified = [i for i, j in enumerate(counts) if j == max(counts)]
         final = []
         for i in identified:
             final.append(candidates[i])
-
-
-        # final = []
-        # for i in candidates:
-        #     c = self.titles[i][0]
-        #     i1 = c.find(",")
-        #     if i1 != -1:
-        #         i2 = c[i1:].find(" ")
-        #         c = c[i1+1:i2] + c[:i1] + c[i2:]
-        #     if clarification in c:
-        #         final.append(i)
-
         return final
 
     #############################################################################
