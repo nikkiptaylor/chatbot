@@ -292,11 +292,16 @@ class Chatbot:
         """
         # done
         movies = []
-        title = title.lower().split()
+        if self.creative:
+            title = title.lower()
+        title = title.split()
         for i in range(len(self.titles)):
             present = True
             for j in title:
-                index = (self.titles[i][0].lower()).find(j)
+                if self.creative:
+                    index = ((self.titles[i][0]).lower()).find(j)
+                else:
+                    index = (self.titles[i][0]).find(j)
                 if index == -1:
                     present = False
             if present:
