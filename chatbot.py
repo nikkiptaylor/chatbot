@@ -273,7 +273,6 @@ class Chatbot:
                     movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
         return movie_titles
 
-
     def find_movies_by_title(self, title):
         """ Given a movie title, return a list of indices of matching movies.
 
@@ -406,7 +405,6 @@ class Chatbot:
 
         return sentiment
 
-
     def extract_sentiment_for_movies(self, preprocessed_input):
         """Creative Feature: Extracts the sentiments from a line of pre-processed text
         that may contain multiple movies. Note that the sentiments toward
@@ -454,7 +452,6 @@ class Chatbot:
                 for match in matches:
                     sentiments.append((re.findall(titlemap[match], preprocessed_input, re.IGNORECASE)[0], sentiment))
         return sentiments
-
 
     def find_movies_closest_to_title(self, title, max_distance=3):
         """Creative Feature: Given a potentially misspelled movie title,
@@ -504,7 +501,6 @@ class Chatbot:
 
         return edit_distance_map[least_edit_distance] if least_edit_distance != float('inf') else []
 
-
     def disambiguate(self, clarification, candidates):
         """Creative Feature: Given a list of movies that the user could be talking about
         (represented as indices), and a string given by the user as clarification
@@ -526,6 +522,8 @@ class Chatbot:
         """
         #loop through all the candidates to find max substring of words
         counts = [0]*len(candidates)
+        oldest = [1000000, 0]
+        newest = [-1, 0]
         for i in range(len(candidates)):
 
             #format the name of the movie
@@ -537,10 +535,22 @@ class Chatbot:
             #find largest substring of full words
             a = movie.split()
             for w in range(len(a)):
+                if "\(" in a[w]:
+                    i1 = a[w].index("\(")
+                    i2 = a[w].index("\)")
+                    if re.match('^[0-9]*$', a[w][i1+1:i2]):
+                        year = int(a[w][i1+1:i2])
+                        if year > newest[0]:
+                            newest[0] = year
+                            newest[1] = candidates[i]
+                        if year < oldest:
+                            oldest[0] = year
+                            oldest[1] = candidates[i]
+
                 word = re.sub('\(', '', a[w])
                 word = re.sub("\)", "", word)
                 a[w] = word
-            b = clarification.split()
+            b = clarification.lower().split()
 
             #longest common subsequence
             i_m = 0
@@ -570,16 +580,23 @@ class Chatbot:
 
         #Don't identify by movie title but other inputs
         if max(counts) == 0:
-            if re.match(clarification, "^ *\d[\d ]*$"):
+
+            #provided with int
+            if re.match('^[0-9]*$', clarification):
                 i = int(clarification)
                 if i <= len(candidates):
-                    return candidates[i-1]
-            if re.match(clarification, "most recent"):
-                return oldest
-            if re.match(clarification, "most recent"):
-                return recent
+                    return [candidates[i-1]]
 
-        #prints the longest sub-sequene
+            #provided with int as a word or time frame
+            clar = clarification.split()
+            total = len(candidates)-1
+            word_int = {"first":0, "second":1, "third":2, "fourth":3, "fifth":4, "sixth":6, "seventh":7, "eighth":8, "ninth":9, "tenth": 10, "last": total, "recent": newest[1], "newest": newest[1], "oldest": oldest[1]}
+            for c in clar:
+                if c in word_int:
+                    i = word_int[c]
+                    return [candidates[i]]
+
+        #prints the longest sub-sequence
         identified = [i for i, j in enumerate(counts) if j == max(counts)]
         final = []
         for i in identified:
