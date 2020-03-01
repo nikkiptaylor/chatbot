@@ -199,8 +199,11 @@ class Chatbot:
                 self.title_id = potential_titles[0]
 
         #EXTRACT SENTIMENT OF LINE
-        sentiment = self.extract_sentiment(line)
+        return self.determine_sentiment(line, text)
+
+    def determine_sentiment(self, line, text):
         sent = ""
+        sentiment = self.extract_sentiment(line)
         if sentiment == 1:
             sent = "You liked \"{}\"! ".format(text[0])
             self.user_ratings[self.title_id] = sentiment
@@ -209,34 +212,6 @@ class Chatbot:
             self.user_ratings[self.title_id] = sentiment
         else:
             sent = "I'm sorry, I am not sure how you felt about \"{}\". Could you provide me with more information? ".format(text[0])
-            self.moreInfo = True
-            self.movieTitle = text
-            return sent
-
-        if self.recommendations < 4:
-            response = sent + "Please tell me your thoughts on another movie."
-            self.recommendations += 1
-        else:
-             #print(self.user_ratings)
-            self.recommendations = self.recommend(self.user_ratings, self.ratings, 10, self.creative)
-            first = self.recommendations.pop(0)
-            recommend = "That is enough for me to make a recommendation. I recommend that you watch \"{}\"! " .format(self.titles[first][0])
-            self.rec = True
-            optionToQuit = "Would you like me to give you another recommendation? If YES enter \"Y\", and if NO enter :quit if you're done."
-            response = sent + recommend + optionToQuit
-        return response
-
-    def determine_sentiment(self, line, text):
-        sent = ""
-        sentiment = self.extract_sentiment(line)
-        if sentiment == 1:
-            sent = "You liked \"{}\"! ".format(text)
-            self.user_ratings[self.title_id] = sentiment
-        elif sentiment == -1:
-            sent = "You did not like \"{}\"! ".format(text)
-            self.user_ratings[self.title_id] = sentiment
-        else:
-            sent = "I'm sorry, I am not sure how you felt about \"{}\". Could you provide me with more information? ".format(text)
             self.moreInfo = True
             self.movieTitle = text
             return sent
