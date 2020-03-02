@@ -241,6 +241,45 @@ class Chatbot:
         #EXTRACT SENTIMENT OF LINE
         return self.determine_sentiment(line, text)
 
+    def multi_movie_sent_extraction(self, line):
+        print("Multi Movie")
+        sent = ""
+        print(self.multiSent)
+        for i in range(len(self.multiSent)):
+            sentiment = self.multiSent[i][1]
+            if sentiment == 1:
+                sent += "You liked \"{}\"! ".format(self.titles[self.multiSent[i][0]][0])
+                self.user_ratings[self.multiSent[i][0]] = sentiment
+                self.recommendations += 1
+            elif sentiment == -1:
+                sent += "You did not like \"{}\"! ".format(self.titles[self.multiSent[i][0]][0])
+                self.user_ratings[self.multiSent[i][0]] = sentiment
+                self.recommendations += 1
+            else:
+                sent += "I'm sorry, I am not sure how you felt about \"{}\". Could you provide me with more information? ".format(self.titles[self.multiSent[i][0]][0])
+                self.moreInfo = True
+                self.movieTitle = self.titles[self.multiSent[i][0]]
+                return sent
+
+        if self.recommendations < 4:
+            response = sent + "Please tell me your thoughts on another movie."
+            self.recommendations += 1
+        else:
+            self.recommendations = self.recommend(self.user_ratings, self.ratings, 10, self.creative)
+            first = self.recommendations.pop(0)
+
+            # put the in the front of the movie title
+            formatted_title = self.titles[first][0]
+            if re.search(', The \([0-9]{4}\)$', formatted_title):
+                formatted_title = re.sub(', The \(', ' (', formatted_title)
+                formatted_title = 'The ' + formatted_title
+
+            recommend = "That is enough for me to make a recommendation. I recommend that you watch \"{}\"! " .format(formatted_title)
+            self.rec = True
+            optionToQuit = "Would you like me to give you another recommendation? If YES enter Y, and if NO enter :quit if you're done"
+            response = sent + recommend + optionToQuit
+        return response
+
     #creative mode
     def process_creative(self, line):
         #OPTION 1: IF YOU'RE ASKING FOR MORE RECS
@@ -279,6 +318,10 @@ class Chatbot:
                 self.clarify = False
                 self.candidates = []
                 text = self.titles[dis_titles[0]]
+
+                #multi-movie input
+                if self.multimovieInput:
+                    return self.multi_movie_sent_extraction(line)
             else:
                 self.candidates = dis_titles
                 r = "Please provide more clarification about which movie it is (i.e. unique word): "
@@ -312,27 +355,28 @@ class Chatbot:
                     # ADDRESS MULTIPLE MOVIES, for now just looks at first one
                     res = ""
                     exactMatch = False
+                    print(len(text))
                     if len(text) > 1:
                         self.multiSent = self.extract_sentiment_for_movies(line)
                         print(self.multiSent)
                         res = "You entered multiple movies."
                         for i in range(len(text)):
                             n = i+1
-                            res += (" For movie " + str(n) + "." + text[i])
+                            res += (" For movie " + str(n) + ". \"" + text[i]) + "\""
                             if len(movies[i]) == 0:
                                 res += " we found no movie by that name."
                             elif len(movies[i]) == 1:
-                                res += " we found a match: " + self.titles[movies[i][0]][0]
-                                self.multiSent[i][0] = self.titles[movies[i][0]][0]
+                                res += " we found a match: " + self.titles[movies[i][0]][0] + ". "
+                                self.multiSent[i] = (movies[i][0], self.multiSent[i][1])
                                 exactMatch = True
                             else:
                                 res += " we found multiple potential matches."
 
+                        print(len(multi_movies))
                         if len(multi_movies) == 0 and exactMatch == False:
                             res += " I'm sorry! Since I could not find any matching titles, I'm going to ask you to please enter another title."
                         elif len(multi_movies) == 0:
-                            movies_sentiment = extract_sentiment_for_movies(self, line)
-                            return
+                            return res + self.multi_movie_sent_extraction(line)
                         else:
                             res += " We will now disambiguate the " + str(len(multi_movies)) + " remaining title(s). "
                             self.candidates = multi_movies[0]
