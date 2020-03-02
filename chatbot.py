@@ -123,7 +123,7 @@ class Chatbot:
     #for process
     def more_recommendations(self, line):
         if len(self.recommendations) != 0:
-            if line == "Y":
+            if line.lower() == "yes" or line.lower() == "correct" or line.lower() == "yeah" or line.lower() == "yesh" or line.lower() == "yeah!":
                 first = self.recommendations.pop(0)
 
                 formatted_title = self.titles[first][0]
@@ -132,14 +132,16 @@ class Chatbot:
                     formatted_title = 'The ' + formatted_title
 
                 recommend = "The next movie I recommend you watch is \"{}\"! " .format(formatted_title)
-                mes = "Would you like me to give you another recommendation? If YES enter \"Y\", and if NO enter :quit if you're done."
+                mes = "Would you like me to give you another recommendation? If YES enter yes, and if NO enter no. Enter :quit if you're done."
                 if len(self.recommendations) == 0:
                     mes = "The was my final recommendation! Thank you for chatting today and please press :quit to quit."
                 return recommend + mes
+            elif line.lower() == "no" or line.lower() == 'nope' or line.lower() == 'no!' or line.lower() == 'nope!':
+                return "Please tell me your thoughts on another movie."
             else:
-                return "I did not understand. Would you like me to give you another recommendation? If YES enter \"Y\", and if NO enter :quit if you're done."
+                return "I did not understand. Would you like me to give you another recommendation? If YES enter yes, and if NO enter no. Enter :quit if you're done."
         else:
-            return "I have no more recommendations. Please enter :quit to exit."
+            return "I have no more recommendations. Please tell me your thoughts on another movie or enter :quit to exit."
 
     #for process
     def movies_closest_to_title(self, line):
@@ -214,7 +216,7 @@ class Chatbot:
 
             recommend = "That is enough for me to make a recommendation. I recommend that you watch \"{}\"! " .format(formatted_title)
             self.rec = True
-            optionToQuit = "Would you like me to give you another recommendation? If YES enter Y, and if NO enter :quit if you're done"
+            optionToQuit = "Would you like me to give you another recommendation? If YES enter yes, and if NO enter no. Else enter :quit if you're done"
             response = sent + recommend + optionToQuit
         return response
 
@@ -226,7 +228,7 @@ class Chatbot:
 
         text = []
         #OPTION 2: CLARIFYING SENTIMENT OF MOVIE
-        if self.moreInfo:
+        if self.moreInfo and self.extract_titles(line) == self.movieTitle:
             text = self.movieTitle
             self.moreInfo = False
 
@@ -241,8 +243,11 @@ class Chatbot:
                 return "Please only tell me about one movie at a time. Go ahead."
             else:
                 potential_titles = self.find_movies_by_title(text[0])
-                if len(potential_titles) == 0 or len(potential_titles) > 1:
+                if len(potential_titles) == 0 :
                     return "I'm sorry. We could not find any titles by that exact name. Please enter another more specific title."
+
+                if len(potential_titles) > 1:
+                    return "I found more than one movie called \"" + text[0] + "\". Could you clarify?"
 
                 #SUCCESS: User only entered one movie
                 self.title_id = potential_titles[0]
@@ -293,7 +298,7 @@ class Chatbot:
 
             recommend = "That is enough for me to make a recommendation. I recommend that you watch \"{}\"! " .format(formatted_title)
             self.rec = True
-            optionToQuit = "Would you like me to give you another recommendation? If YES enter Y, and if NO enter :quit if you're done"
+            optionToQuit = "Would you like me to give you another recommendation? If YES enter yes, and if NO enter :quit if you're done"
             response = sent + recommend + optionToQuit
         return response
 
@@ -366,7 +371,6 @@ class Chatbot:
                     # ADDRESS MULTIPLE MOVIES, for now just looks at first one
                     res = ""
                     exactMatch = False
-                    print(len(text))
                     if len(text) > 1:
                         self.multiSent = self.extract_sentiment_for_movies(line)
                         print(self.multiSent)
@@ -410,7 +414,28 @@ class Chatbot:
                     else:
                         potential_titles = self.find_movies_by_title(text[0])
                         if len(potential_titles) == 0:
-                            return "I'm sorry. We could not find any titles by that exact name. Please enter another title."
+                            potential_titles = self.find_movies_closest_to_title(text[0])
+                            if len(potential_titles) == 0:
+                                return "I'm sorry. We could not find any titles by that name. Please enter another title."
+                            elif len(potential_titles) == 1:
+                                movie = self.titles[potential_titles[0]][0]
+                                movie = movie[:movie.rfind('(')]
+                                copy_movie = movie.split()
+                                if (copy_movie[len(copy_movie) - 1] == 'The') or (copy_movie[len(copy_movie) - 1] == 'A'):
+                                    movie = self.fix_movie(copy_movie)
+                                self.processTextConf = True
+                                self.originalLine = line
+                                self.movieTitle = [movie]
+                                return "Did you mean \"" + movie + "\"?"
+                            else:
+                                r = "Please provide more clarification about which movie it is (i.e. unique word): "
+                                for i in range(len(movies[0])):
+                                    r += self.titles[movies[0][i]][0]
+                                    if i < (len(movies[0])-1):
+                                        r += ", "
+                                    else:
+                                        r += ":"
+                                return r
                         if len(potential_titles) > 1:
                             self.sent = self.extract_sentiment(line)
                             self.sentBool = True
@@ -508,6 +533,12 @@ class Chatbot:
 
                 if  re.search(formatted_title, preprocessed_input, re.IGNORECASE):
                     movies.append(movie_name),
+                if movies == []:
+                    quote_indices = [i for i, ltr in enumerate(preprocessed_input) if ltr == '\"']
+                    for i in range(0, len(quote_indices), 2):
+                        if i >= len(quote_indices)-1:
+                            return []
+                        movies.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
             return list(set(movies))
 
         #STARTER MODE
@@ -515,7 +546,9 @@ class Chatbot:
             quote_indices = [i for i, ltr in enumerate(preprocessed_input) if ltr == '\"']
             movie_titles = []
             for i in range(0, len(quote_indices), 2):
-                    movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
+                if i >= len(quote_indices)-1:
+                    return []
+                movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
             return movie_titles
 
     def find_movies_by_title(self, title):
@@ -1014,4 +1047,3 @@ class Chatbot:
 if __name__ == '__main__':
     print('To run your chatbot in an interactive loop from the command line, run:')
     print('    python3 repl.py')
-
