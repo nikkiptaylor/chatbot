@@ -39,6 +39,8 @@ class Chatbot:
         self.user_ratings = [0]*len(self.titles)
         self.rec = False
         self.title_id = 0
+        self.multimovieInput = False
+        self.remainingMulti = []
 
         #############################################################################
         # TODO: Binarize the movie ratings matrix.                                  #
@@ -228,10 +230,15 @@ class Chatbot:
             response = sent + recommend + optionToQuit
         return response
 
-
     def process_creative(self, line):
+        #OPTION 1: IF YOU'RE ASKING FOR MORE RECS
         if self.rec:
             return self.more_recommendations(line)
+
+        #OPTION 2: IF MULIPLE MOVIES WERE ENTERED
+        if self.multimovieInput:
+            if len(self.remainingMulti) == 1:
+                return "multiple movies"
 
         text = ""
         foundTitle = False
@@ -254,14 +261,12 @@ class Chatbot:
                 self.processTextConf = False
                 return response
 
-        #OPTION 1: CLARIFICATION -- if there are multiple movie options
+        #OPTION 3: CLARIFICATION -- if there are multiple movie options
         if self.clarify == True:
             return self.disambiguate_titles(line)
 
         #OPTION 2: NARROWED IT DOWN TO ONE MINUTE
         else:
-            self.originalLine = line
-
             #SENTIMENT ClARIFY: check if the user if providing more info for sentiment
             if self.moreInfo:
                 text = self.movieTitle
@@ -270,31 +275,55 @@ class Chatbot:
             #INPUT OF MOVIE
             else:
                 text = self.extract_titles(line)
+                print(text)
                 movies = []
+                multi_movies = []
                 for t in text:
                     potential_titles = self.find_movies_by_title(t)
-                    if potential_titles != []:
-                        movies.append(potential_titles)
+                    movies.append(potential_titles)
+                    if len(potential_titles) > 1:
+                        multi_movies.append(potential_titles)
+
                 # ADDRESS MULTIPLE MOVIES, for now just looks at first one
-                if len(movies) >= 1:
-                    #then plug into find movies by title
-                    if len(movies[0]) > 1:
-                        self.candidates = movies[0]
-                        self.clarify = True
-                        r = "Please provide more clarification about which movie it is (i.e. unique word): "
-                        for i in range(len(movies[0])):
-                            r += self.titles[movies[0][i]][0]
-                            if i < (len(movies[0])-1):
-                                r += ", "
-                            else:
-                                r += ":"
-                        return r
+                res = ""
+                print(text)
+                if len(text) > 1:
+                    res = "You entered multiple movies."
+                    for i in range(len(text)):
+                        n = i+1
+                        res += (" For movie " + str(n) + "." + text[i])
+                        if len(movies[i]) == 0:
+                            res += " we found no movie by that name."
+                        elif len(movies[i]) == 1:
+                            res += " we found a match: " + self.titles[movies[i][0]][0]
+                        else:
+                            res += " we found multiple potential matches."
+
+                    if len(multi_movies) == 0:
+                        res += " I'm sorry! Since I could not find any matching titles, I'm going to ask you to please enter another title."
+                    else:
+                        res += " We will now disambiguate the " + str(len(multi_movies)) + " remaining titles. "
+
+                        self.candidates = multi_movies[0]
+                        if len(multi_movies) > 1:
+                            self.remainingMulti = multi_movies[1:]
+                            self.multimovieInput = True
+
+                self.clarify = True
+                r = "Please provide more clarification about which movie it is (i.e. unique word): "
+                for i in range(len(multi_movies[0])):
+                    r += self.titles[multi_movies[0][i]][0]
+                    if i < (len(multi_movies[0])-1):
+                        r += ", "
+                    else:
+                        r += ":"
+                return (res + r)
 
                 #CHECK IF TYPO IN MOVIE ENTERING
-                else:
-                    #if the input has a typo, check close matches
-                    return self.movies_closest_to_title(line)
+                #else:
+                #    return self.movies_closest_to_title(line)
 
+        #determine the sentiment of the movie
         return self.determine_sentiment(line, text)
 
     @staticmethod
@@ -323,6 +352,14 @@ class Chatbot:
         #############################################################################
 
         return text
+
+    def check_for_match(self, strA, strB):
+        words = strA.split()
+        for word in words:
+            regex = '([^A-Za-z]|^)' + word + '([^A-Za-z]|$)'
+            if not re.search(regex, strB):
+                return False
+        return True
 
     def extract_titles(self, preprocessed_input):
         """Extract potential movie titles from a line of pre-processed text.
@@ -364,11 +401,7 @@ class Chatbot:
 
                 if  re.search(formatted_title, preprocessed_input, re.IGNORECASE):
                     movies.append(movie_name),
-            if movies == []:
-                quote_indices = [i for i, ltr in enumerate(preprocessed_input) if ltr == '\"']
-                for i in range(0, len(quote_indices), 2):
-                        movies.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
-            return movies
+            return list(set(movies))
 
         #STARTER MODE
         else:
@@ -376,7 +409,7 @@ class Chatbot:
             movie_titles = []
             for i in range(0, len(quote_indices), 2):
                     movie_titles.append(preprocessed_input[quote_indices[i] + 1:quote_indices[i+1]])
-        return movie_titles
+            return movie_titles
 
     def find_movies_by_title(self, title):
         """ Given a movie title, return a list of indices of matching movies.
@@ -398,19 +431,18 @@ class Chatbot:
         movies = []
         if self.creative:
             title = title.lower()
-        title = title.split()
         for i in range(len(self.titles)):
             present = True
-            for j in title:
-                if self.creative:
-                    index = ((self.titles[i][0]).lower()).find(j)
-                else:
-                    index = (self.titles[i][0]).find(j)
-                if index == -1:
-                    present = False
-            if present:
+            title_to_look_at = self.titles[i][0]
+
+            if self.creative:
+                title_to_look_at = title_to_look_at.lower()
+
+            if self.check_for_match(title, title_to_look_at):
                 movies.append(i)
+
         return movies
+
 
     def extract_sentiment(self, preprocessed_input):
         """Extract a sentiment rating from a line of pre-processed text.
