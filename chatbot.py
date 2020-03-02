@@ -143,8 +143,11 @@ class Chatbot:
 
     #for process
     def movies_closest_to_title(self, line):
-        #if the input has a typo, check close matches
-        title = self.extract_titles(line)
+        quote_indices = [i for i, ltr in enumerate(line) if ltr == '\"']
+        movie_titles = []
+        for i in range(0, len(quote_indices), 2):
+                movie_titles.append(line[quote_indices[i] + 1:quote_indices[i+1]])
+        title = movie_titles
         if(len(title) == 1):
             potential_titles = self.find_movies_closest_to_title(title[0])
             if len(potential_titles) == 0:
@@ -156,6 +159,7 @@ class Chatbot:
                 if (copy_movie[len(copy_movie) - 1] == 'The') or (copy_movie[len(copy_movie) - 1] == 'A'):
                     movie = self.fix_movie(copy_movie)
                 self.processTextConf = True
+                self.movieTitle = [movie]
                 return "Did you mean \"" + movie + "\"?"
             else:
                 r = "Please provide more clarification about which movie it is (i.e. unique word): "
@@ -173,16 +177,21 @@ class Chatbot:
         sent = ""
         sentiment = 0
         if self.sentBool:
-            print("BOOL")
             sentiment = self.sent
             self.sentBool = False
         else:
             sentiment = self.extract_sentiment(line)
-        if sentiment == 1:
-            sent = "You liked \"{}\"! ".format(text[0])
+        if sentiment == 1 or sentiment == 2:
+            extra = ""
+            if sentiment == 2:
+                extra = "really"
+            sent = "You " + extra + " liked \"{}\"! ".format(text[0])
             self.user_ratings[self.title_id] = sentiment
-        elif sentiment == -1:
-            sent = "You did not like \"{}\"! ".format(text[0])
+        elif sentiment == -1 or sentiment == -2:
+            extra = ""
+            if sentiment == -2:
+                extra = "really"
+            sent = "You " + extra + " did not like \"{}\"! ".format(text[0])
             self.user_ratings[self.title_id] = sentiment
         else:
             sent = "I'm sorry, I am not sure how you felt about \"{}\". Could you provide me with more information? ".format(text[0])
@@ -248,13 +257,21 @@ class Chatbot:
         for i in range(len(self.multiSent)):
             sentiment = self.multiSent[i][1]
             if sentiment == 1:
-                sent += "You liked \"{}\"! ".format(self.titles[self.multiSent[i][0]][0])
+                sent += "You liked \"{}\"".format(self.titles[self.multiSent[i][0]][0])
                 self.user_ratings[self.multiSent[i][0]] = sentiment
                 self.recommendations += 1
+                if i < len(self.multiSent)-1:
+                    sent += " and "
+                else:
+                    sent += "."
             elif sentiment == -1:
                 sent += "You did not like \"{}\"! ".format(self.titles[self.multiSent[i][0]][0])
                 self.user_ratings[self.multiSent[i][0]] = sentiment
                 self.recommendations += 1
+                if i < len(self.multiSent)-1:
+                    sent += " and "
+                else:
+                    sent += "."
             else:
                 sent += "I'm sorry, I am not sure how you felt about \"{}\". Could you provide me with more information? ".format(self.titles[self.multiSent[i][0]][0])
                 self.moreInfo = True
@@ -293,19 +310,9 @@ class Chatbot:
 
         text = ""
         if self.processTextConf:
-            if line.lower() == 'yes':
-                title = self.extract_titles(self.originalLine)
-                potential_titles = self.find_movies_closest_to_title(title[0])
-                movie = self.titles[potential_titles[0]][0]
-                movie = movie[:movie.rfind('(')]
-                copy_movie = movie.split()
-                if (copy_movie[len(copy_movie) - 1] == 'The') or (copy_movie[len(copy_movie) - 1] == 'A'):
-                    movie = self.fix_movie(copy_movie)
-
-                text = movie
-                sentiment = self.extract_sentiment(self.originalLine)
+            if line.lower() == "yes" or line.lower() == "correct" or line.lower() == "yeah" or line.lower() == "yesh":
                 self.processTextConf = False
-                return self.determine_sentiment(line, text)
+                return self.determine_sentiment(self.originalLine, self.movieTitle)
             else:
                 response = "Please tell me your thoughts on another movie."
                 self.processTextConf = False
@@ -343,7 +350,11 @@ class Chatbot:
             #INPUT OF MOVIE
             else:
                 text = self.extract_titles(line)
-                if len(text) != 0:
+                #check if there's a typo
+                if len(text) == 0:
+                    self.originalLine = line
+                    return self.movies_closest_to_title(line)
+                else:
                     movies = []
                     multi_movies = []
                     for t in text:
@@ -365,18 +376,20 @@ class Chatbot:
                             res += (" For movie " + str(n) + ". \"" + text[i]) + "\""
                             if len(movies[i]) == 0:
                                 res += " we found no movie by that name."
+                                self.multiSent[i] = (0, 0)
                             elif len(movies[i]) == 1:
                                 res += " we found a match: " + self.titles[movies[i][0]][0] + ". "
                                 self.multiSent[i] = (movies[i][0], self.multiSent[i][1])
                                 exactMatch = True
                             else:
                                 res += " we found multiple potential matches."
+                                self.multiSent[i] = (movies[i], self.multiSent[i][1])
 
-                        print(len(multi_movies))
+                        print(self.multiSent)
                         if len(multi_movies) == 0 and exactMatch == False:
-                            res += " I'm sorry! Since I could not find any matching titles, I'm going to ask you to please enter another title."
+                            return "I'm sorry! Since I could not find any matching titles, I'm going to ask you to please enter another title."
                         elif len(multi_movies) == 0:
-                            return res + self.multi_movie_sent_extraction(line)
+                            return self.multi_movie_sent_extraction(line)
                         else:
                             res += " We will now disambiguate the " + str(len(multi_movies)) + " remaining title(s). "
                             self.candidates = multi_movies[0]
@@ -416,10 +429,6 @@ class Chatbot:
                             #SUCCESS: User only entered one movie
                             self.title_id = potential_titles[0]
                             return self.determine_sentiment(line, text)
-
-                #CHECK IF TYPO IN MOVIE ENTERING
-                #else:
-                #    return self.movies_closest_to_title(line)
 
         #determine the sentiment of the movie
         return self.determine_sentiment(line, text)
@@ -804,7 +813,8 @@ class Chatbot:
                         if year > newest[0]:
                             newest[0] = year
                             newest[1] = candidates[i]
-                        if year < oldest:
+                        if year < oldest[0]:
+                            print("oldest")
                             oldest[0] = year
                             oldest[1] = candidates[i]
 
@@ -953,17 +963,16 @@ class Chatbot:
         #######################################################################################
 
         # Populate this list with k movie indices to recommend to the user.
-        if not creative:
-            recommendations = {} # dict of index to estimated rating
-            rated = (user_ratings != 0) # get indices of nonzero ratings
-            rated_indices = np.where(rated)[0]
+        recommendations = {} # dict of index to estimated rating
+        rated = (user_ratings != 0) # get indices of nonzero ratings
+        rated_indices = np.where(rated)[0]
 
-            for j in range(len(ratings_matrix)):
-                if j not in rated_indices and sum(ratings_matrix[j]) != 0:
-                        est_rating = 0
-                        for index in rated_indices:
-                            est_rating += self.similarity(ratings_matrix[index], ratings_matrix[j])*user_ratings[index]
-                        recommendations[j] = est_rating
+        for j in range(len(ratings_matrix)):
+            if j not in rated_indices and sum(ratings_matrix[j]) != 0:
+                    est_rating = 0
+                    for index in rated_indices:
+                        est_rating += self.similarity(ratings_matrix[index], ratings_matrix[j])*user_ratings[index]
+                    recommendations[j] = est_rating
         # sort by estimated rating, get 1st k and then get indices
         final_recs = sorted(recommendations.items(), key=lambda item: item[1], reverse = True)
         final_recs = final_recs[:k]
